@@ -18,12 +18,12 @@ async function handleRes(res) {
 }
 
 export async function getLeads() {
-  const res = await fetch(`${API_BASE}/api/leads`);
+  const res = await fetch(`${API_BASE}/leads`);
   return handleRes(res);
 }
 
 export async function createLead(payload) {
-  const res = await fetch(`${API_BASE}/api/leads`, {
+  const res = await fetch(`${API_BASE}/leads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -32,6 +32,6 @@ export async function createLead(payload) {
 }
 
 export async function deleteLead(id) {
-  const res = await fetch(`${API_BASE}/api/leads/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${API_BASE}/leads/${id}`, { method: 'DELETE' });
   return handleRes(res);
 }
