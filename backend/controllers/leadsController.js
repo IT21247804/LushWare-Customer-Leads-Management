@@ -40,4 +40,19 @@ async function remove(req, res) {
   }
 }
 
-module.exports = { getAll, create, getById, remove };
+async function update(req, res) {
+  try {
+    const { name, email, phone, notes } = req.body;
+    const lead = await Lead.findByIdAndUpdate(
+      req.params.id,
+      { name, email, phone, notes },
+      { new: true, runValidators: true }
+    );
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    res.json(lead);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}
+
+module.exports = { getAll, create, getById, update, remove };

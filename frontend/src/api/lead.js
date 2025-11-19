@@ -35,3 +35,12 @@ export async function deleteLead(id) {
   const res = await fetch(`${API_BASE}/api/leads/${id}`, { method: 'DELETE' });
   return handleRes(res);
 }
+
+export async function updateLead(id, payload) {
+  const res = await fetch(`${API_BASE}/api/leads/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return handleRes(res);
+}
