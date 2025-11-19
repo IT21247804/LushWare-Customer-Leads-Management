@@ -14,10 +14,10 @@ app.use(express.json());
 app.use(morgan('dev'));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
+app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: Date.now() }));
 
 // Mount leads routes
-app.use('/api/leads', leadsRouter);
+app.use('/leads', leadsRouter);
 
 // Start server after DB connects
 const PORT = process.env.PORT || 5000;
