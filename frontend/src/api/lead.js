@@ -44,3 +44,8 @@ export async function updateLead(id, payload) {
   });
   return handleRes(res);
 }
+
+export async function convertLead(id) {
+  const res = await fetch(`${API_BASE}/api/leads/${id}/convert`, { method: 'POST' });
+  return handleRes(res);
+}

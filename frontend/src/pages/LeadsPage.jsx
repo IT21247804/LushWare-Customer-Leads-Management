@@ -1,16 +1,37 @@
+// ...existing code...
 import React, { useEffect, useState } from 'react';
-import { getLeads, createLead, deleteLead, updateLead } from '../api/lead';
+import { getLeads, deleteLead, updateLead, convertLead } from '../api/lead';
+import { Link } from 'react-router-dom';
+
+const SOURCE_OPTS = [
+  'website',
+  'facebook',
+  'instagram',
+  'google-ads',
+  'referral',
+  'manual',
+  'other'
+];
+
+const STATUS_OPTS = ['new', 'in-progress', 'converted', 'lost'];
+const PRIORITY_OPTS = ['hot', 'warm', 'cold'];
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '' });
-  
-  // Edit modal state
+  // edit modal state
   const [editModal, setEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ _id: '', name: '', email: '', phone: '', notes: '' });
+  const [editForm, setEditForm] = useState({
+    _id: '',
+    name: '',
+    email: '',
+    phone: '',
+    notes: '',
+    source: 'manual',
+    status: 'new',
+    priority: 'warm'
+  });
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
@@ -30,27 +51,9 @@ export default function LeadsPage() {
     }
   }
 
-  function onChange(e) {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  }
-
   function onEditChange(e) {
-    setEditForm({ ...editForm, [e.target.name]: e.target.value });
-  }
-
-  async function onSubmit(e) {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
-    try {
-      const created = await createLead(form);
-      setLeads(prev => [created, ...prev]);
-      setForm({ name: '', email: '', phone: '', notes: '' });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
+    const { name, value } = e.target;
+    setEditForm(prev => ({ ...prev, [name]: value }));
   }
 
   function openEditModal(lead) {
@@ -59,7 +62,10 @@ export default function LeadsPage() {
       name: lead.name,
       email: lead.email,
       phone: lead.phone || '',
-      notes: lead.notes || ''
+      notes: lead.notes || '',
+      source: lead.source || 'manual',
+      status: lead.status || 'new',
+      priority: lead.priority || 'warm'
     });
     setEditModal(true);
     setError('');
@@ -67,7 +73,7 @@ export default function LeadsPage() {
 
   function closeEditModal() {
     setEditModal(false);
-    setEditForm({ _id: '', name: '', email: '', phone: '', notes: '' });
+    setEditForm({ _id: '', name: '', email: '', phone: '', notes: '', source: 'manual', status: 'new', priority: 'warm' });
   }
 
   async function onUpdate(e) {
@@ -96,21 +102,29 @@ export default function LeadsPage() {
     }
   }
 
-  return (
-    <div style={{ padding: 20, maxWidth: 1000, margin: '0 auto' }}>
-      <h2>Leads</h2>
+  async function onConvert(id) {
+    if (!window.confirm('Convert this lead to a customer?')) return;
+    setError('');
+    try {
+      const result = await convertLead(id);
+      if (result.lead) {
+        setLeads(prev => prev.map(l => l._id === result.lead._id ? result.lead : l));
+      }
+      alert(result.message || 'Converted lead to customer');
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
 
-      <form onSubmit={onSubmit} style={{ marginBottom: 20, display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
-        <input name="name" placeholder="Name" value={form.name} onChange={onChange} required />
-        <input name="email" placeholder="Email" value={form.email} onChange={onChange} type="email" required />
-        <input name="phone" placeholder="Phone" value={form.phone} onChange={onChange} />
-        <input name="notes" placeholder="Notes" value={form.notes} onChange={onChange} />
-        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8 }}>
-          <button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Create Lead'}</button>
-          <button type="button" onClick={() => setForm({ name: '', email: '', phone: '', notes: '' })}>Reset</button>
-          <button type="button" onClick={refresh}>Refresh</button>
+  return (
+    <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <h2 style={{ margin: 0 }}>Leads</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link to="/leads/create"><button>Create Lead</button></Link>
+          <button onClick={refresh}>Refresh</button>
         </div>
-      </form>
+      </div>
 
       {error && <div style={{ color: 'red', marginBottom: 12 }}>{error}</div>}
 
@@ -123,22 +137,33 @@ export default function LeadsPage() {
               <th style={{ borderBottom: '1px solid #ddd', textAlign: 'left', padding: 8 }}>Name</th>
               <th style={{ borderBottom: '1px solid #ddd', textAlign: 'left', padding: 8 }}>Email</th>
               <th style={{ borderBottom: '1px solid #ddd', textAlign: 'left', padding: 8 }}>Phone</th>
-              <th style={{ borderBottom: '1px solid #ddd', textAlign: 'left', padding: 8 }}>Notes</th>
+              <th style={{ borderBottom: '1px solid #ddd', textAlign: 'left', padding: 8 }}>Source</th>
+              <th style={{ borderBottom: '1px solid #ddd', textAlign: 'left', padding: 8 }}>Status</th>
+              <th style={{ borderBottom: '1px solid #ddd', textAlign: 'left', padding: 8 }}>Priority</th>
               <th style={{ borderBottom: '1px solid #ddd', padding: 8 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {leads.length === 0 && (
-              <tr><td colSpan="5" style={{ padding: 12 }}>No leads found.</td></tr>
+              <tr><td colSpan="7" style={{ padding: 12 }}>No leads found.</td></tr>
             )}
             {leads.map(lead => (
               <tr key={lead._id}>
                 <td style={{ padding: 8 }}>{lead.name}</td>
                 <td style={{ padding: 8 }}>{lead.email}</td>
                 <td style={{ padding: 8 }}>{lead.phone || '-'}</td>
-                <td style={{ padding: 8 }}>{lead.notes || '-'}</td>
+                <td style={{ padding: 8 }}>{lead.source || '-'}</td>
+                <td style={{ padding: 8 }}>{lead.status || '-'}</td>
+                <td style={{ padding: 8 }}>{lead.priority || '-'}</td>
                 <td style={{ padding: 8 }}>
                   <button onClick={() => openEditModal(lead)} style={{ marginRight: 8 }}>Edit</button>
+                  <button
+                    onClick={() => onConvert(lead._id)}
+                    style={{ marginRight: 8 }}
+                    disabled={lead.status === 'converted'}
+                  >
+                    {lead.status === 'converted' ? 'Converted' : 'Convert'}
+                  </button>
                   <button onClick={() => navigator.clipboard?.writeText(lead._id)} title="Copy ID">Copy ID</button>
                   <button onClick={() => onDelete(lead._id)} style={{ marginLeft: 8 }}>Delete</button>
                 </td>
@@ -148,7 +173,7 @@ export default function LeadsPage() {
         </table>
       )}
 
-      {/* Edit Modal */}
+      {/* Edit Modal (unchanged) */}
       {editModal && (
         <div style={{
           position: 'fixed',
@@ -167,57 +192,62 @@ export default function LeadsPage() {
             padding: 24,
             borderRadius: 8,
             width: '90%',
-            maxWidth: 500,
+            maxWidth: 600,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
           }}>
             <h3 style={{ marginTop: 0 }}>Edit Lead</h3>
             <form onSubmit={onUpdate}>
               <div style={{ display: 'grid', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 4, fontWeight: 'bold' }}>Name</label>
-                  <input 
-                    name="name" 
-                    value={editForm.name} 
-                    onChange={onEditChange} 
-                    required 
-                    style={{ width: '100%', padding: 8 }}
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4 }}>Name</label>
+                    <input name="name" value={editForm.name} onChange={onEditChange} required style={{ width: '100%', padding: 8 }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4 }}>Email</label>
+                    <input name="email" type="email" value={editForm.email} onChange={onEditChange} required style={{ width: '100%', padding: 8 }} />
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 4, fontWeight: 'bold' }}>Email</label>
-                  <input 
-                    name="email" 
-                    type="email"
-                    value={editForm.email} 
-                    onChange={onEditChange} 
-                    required 
-                    style={{ width: '100%', padding: 8 }}
-                  />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4 }}>Phone</label>
+                    <input name="phone" value={editForm.phone} onChange={onEditChange} style={{ width: '100%', padding: 8 }} />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4 }}>Source</label>
+                    <select name="source" value={editForm.source} onChange={onEditChange} style={{ width: '100%', padding: 8 }}>
+                      {SOURCE_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 4, fontWeight: 'bold' }}>Phone</label>
-                  <input 
-                    name="phone" 
-                    value={editForm.phone} 
-                    onChange={onEditChange} 
-                    style={{ width: '100%', padding: 8 }}
-                  />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4 }}>Status</label>
+                    <select name="status" value={editForm.status} onChange={onEditChange} style={{ width: '100%', padding: 8 }}>
+                      {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 4 }}>Priority</label>
+                    <select name="priority" value={editForm.priority} onChange={onEditChange} style={{ width: '100%', padding: 8 }}>
+                      {PRIORITY_OPTS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
                 </div>
+
                 <div>
-                  <label style={{ display: 'block', marginBottom: 4, fontWeight: 'bold' }}>Notes</label>
-                  <textarea 
-                    name="notes" 
-                    value={editForm.notes} 
-                    onChange={onEditChange} 
-                    style={{ width: '100%', padding: 8, minHeight: 80 }}
-                  />
+                  <label style={{ display: 'block', marginBottom: 4 }}>Notes</label>
+                  <textarea name="notes" value={editForm.notes} onChange={onEditChange} style={{ width: '100%', padding: 8, minHeight: 80 }} />
                 </div>
               </div>
+
               <div style={{ marginTop: 20, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" onClick={closeEditModal} disabled={updating}>Cancel</button>
-                <button type="submit" disabled={updating}>
-                  {updating ? 'Updating...' : 'Update Lead'}
-                </button>
+                <button type="submit" disabled={updating}>{updating ? 'Updating...' : 'Update Lead'}</button>
               </div>
             </form>
           </div>
@@ -226,3 +256,4 @@ export default function LeadsPage() {
     </div>
   );
 }
+// ...existing code...

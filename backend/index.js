@@ -5,6 +5,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const { connectDB } = require('./config/db');
 const leadsRouter = require('./routes/leads');
+const customerRouter = require('./routes/customer');
 
 const app = express();
 
@@ -18,6 +19,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: Date.no
 
 // Mount leads routes
 app.use('/api/leads', leadsRouter);
+// Mount customer routes
+app.use('/api/customer', customerRouter);
 
 // Start server after DB connects
 const PORT = process.env.PORT || 5000;
