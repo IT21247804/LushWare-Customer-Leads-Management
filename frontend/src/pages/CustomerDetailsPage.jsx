@@ -212,6 +212,26 @@ export default function CustomerDetailsPage() {
     }
   }
 
+  // helper: download a remote file via blob -> triggers browser download
+  async function downloadFile(url, filename) {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) throw new Error('Failed to fetch file for download');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || 'file';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      // fallback: open in new tab if fetch/download fails (CORS or other)
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
   if (loading) return <div style={{ padding: 20 }}>Loading...</div>;
   if (!customer) return <div style={{ padding: 20 }}>Customer not found.</div>;
 
@@ -357,11 +377,15 @@ export default function CustomerDetailsPage() {
           {(customer.documents || []).map((d) => (
             <li key={d._id || d.fileUrl} style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div>
-                <a href={d.fileUrl} target="_blank" rel="noreferrer">{d.fileName}</a>
+                <div>
+                  <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>{d.fileName}</a>
+                </div>
                 <div style={{ fontSize: 12, color: '#666' }}>{d.uploadedAt ? new Date(d.uploadedAt).toLocaleString() : ''}</div>
               </div>
-              <div>
-                <button onClick={() => handleDeleteDoc(d._id)} style={{ background: '#e53935', color: '#fff' }}>Delete</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => window.open(d.fileUrl, '_blank', 'noopener,noreferrer')} title="View" style={{ padding: '6px 10px' }}>View</button>
+                <button onClick={() => downloadFile(d.fileUrl, d.fileName)} title="Download" style={{ padding: '6px 10px' }}>Download</button>
+                <button onClick={() => handleDeleteDoc(d._id)} style={{ background: '#e53935', color: '#fff', padding: '6px 10px' }}>Delete</button>
               </div>
             </li>
           ))}
