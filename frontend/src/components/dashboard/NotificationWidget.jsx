@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getNotifications, markNotificationRead, deleteNotification } from '../api/notification';
+import { getNotifications, markNotificationRead, deleteNotification } from '../../api/notification';
 
 export default function NotificationWidget() {
   const [items, setItems] = useState([]);

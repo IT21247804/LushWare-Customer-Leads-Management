@@ -38,4 +38,23 @@ async function remove(req, res) {
   }
 }
 
-module.exports = { getAll, markRead, remove };
+// Create notification
+async function create(req, res) {
+  try {
+    const { message, userId } = req.body;
+    if (!message) return res.status(400).json({ error: "message required" });
+
+    const notification = new Notification({
+      message,
+      userId: userId || null,
+      read: false,
+    });
+
+    const saved = await notification.save();
+    res.status(201).json(saved);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+module.exports = { getAll, markRead, remove, create };

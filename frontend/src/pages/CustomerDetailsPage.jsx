@@ -9,6 +9,14 @@ import {
   deleteCustomerLog,
   deleteCustomerProject
 } from '../api/customer';
+import { createNotification } from '../api/notification';
+
+// Import components
+import CustomerHeader from '../components/customer/CustomerHeader';
+import CustomerDetailsForm from '../components/customer/CustomerDetailsForm';
+import CommunicationLog from '../components/customer/CommunicationLog';
+import ProjectHistory from '../components/customer/ProjectHistory';
+import DocumentManager from '../components/customer/DocumentManager';
 
 export default function CustomerDetailsPage() {
   const { id } = useParams();
@@ -19,14 +27,6 @@ export default function CustomerDetailsPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
-
-  // local UI state for adding logs/projects/docs
-  const [logMsg, setLogMsg] = useState('');
-  const [logType, setLogType] = useState('note');
-  const [project, setProject] = useState({ projectName: '', description: '', startDate: '', endDate: '', status: 'ongoing' });
-  const [uploading, setUploading] = useState(false);
-  const [addingLog, setAddingLog] = useState(false);
-  const [addingProject, setAddingProject] = useState(false);
 
   useEffect(() => {
     load();
@@ -74,6 +74,11 @@ export default function CustomerDetailsPage() {
       const updated = await updateCustomer(form._id, form);
       setCustomer(updated);
       setEditing(false);
+
+      await createNotification({
+        message: `Customer "${form.name}" details updated`,
+        read: false
+      }).catch(console.error);
     } catch (err) {
       setError(err.message || String(err));
     }
@@ -82,47 +87,34 @@ export default function CustomerDetailsPage() {
   async function removeCustomer() {
     if (!window.confirm('Delete this customer?')) return;
     try {
+      const customerName = customer.name;
       await deleteCustomer(id);
+
+      await createNotification({
+        message: `Customer "${customerName}" deleted`,
+        read: false
+      }).catch(console.error);
+
       navigate('/customers');
     } catch (err) {
       setError(err.message || String(err));
     }
   }
 
-  async function addLog(e) {
-    e.preventDefault();
-    if (!logMsg) return;
-    setAddingLog(true);
+  async function handleAddLog(payload) {
     setError('');
     try {
-      const payload = { type: logType, message: logMsg };
       const updated = await addCustomerLog(id, payload);
       setCustomer(updated);
       setForm(updated);
-      setLogMsg('');
-      setLogType('note');
-    } catch (err) {
-      setError(err.message || String(err));
-    } finally {
-      setAddingLog(false);
-    }
-  }
 
-  async function addProject(e) {
-    e.preventDefault();
-    if (!project.projectName) return;
-    setAddingProject(true);
-    setError('');
-    try {
-      const payload = { ...project };
-      const updated = await addCustomerProject(id, payload);
-      setCustomer(updated);
-      setForm(updated);
-      setProject({ projectName: '', description: '', startDate: '', endDate: '', status: 'ongoing' });
+      await createNotification({
+        message: `Communication log added: ${payload.message.substring(0, 50)}... for customer ${customer.name}`,
+        read: false
+      }).catch(console.error);
     } catch (err) {
       setError(err.message || String(err));
-    } finally {
-      setAddingProject(false);
+      throw err;
     }
   }
 
@@ -130,11 +122,34 @@ export default function CustomerDetailsPage() {
     if (!window.confirm('Delete this communication log?')) return;
     setError('');
     try {
+      const log = (customer.communicationLogs || []).find(l => l._id === logId);
       const updated = await deleteCustomerLog(id, logId);
       setCustomer(updated);
       setForm(updated);
+
+      await createNotification({
+        message: `Communication log deleted: "${log?.message.substring(0, 50)}..." for customer ${customer.name}`,
+        read: false
+      }).catch(console.error);
     } catch (err) {
       setError(err.message || String(err));
+    }
+  }
+
+  async function handleAddProject(payload) {
+    setError('');
+    try {
+      const updated = await addCustomerProject(id, payload);
+      setCustomer(updated);
+      setForm(updated);
+
+      await createNotification({
+        message: `Project "${payload.projectName}" added for customer ${customer.name}`,
+        read: false
+      }).catch(console.error);
+    } catch (err) {
+      setError(err.message || String(err));
+      throw err;
     }
   }
 
@@ -142,40 +157,28 @@ export default function CustomerDetailsPage() {
     if (!window.confirm('Delete this project?')) return;
     setError('');
     try {
+      const proj = (customer.projectHistory || []).find(p => p._id === projectId);
       const updated = await deleteCustomerProject(id, projectId);
       setCustomer(updated);
       setForm(updated);
+
+      await createNotification({
+        message: `Project "${proj?.projectName}" deleted for customer ${customer.name}`,
+        read: false
+      }).catch(console.error);
     } catch (err) {
       setError(err.message || String(err));
     }
   }
 
-  async function handleDeleteDoc(docId) {
-    if (!window.confirm('Delete this document?')) return;
-    setError('');
-    try {
-      // Remove document from customer's documents array
-      const updatedDocs = customer.documents.filter(d => d._id !== docId);
-      const next = { ...customer, documents: updatedDocs };
-      
-      // Update customer via backend
-      const updated = await updateCustomer(id, next);
-      setCustomer(updated);
-      setForm(updated);
-    } catch (err) {
-      setError(err.message || String(err));
-    }
-  }
-
-  async function onFileChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
+  async function handleUploadDocument(file) {
     setError('');
     try {
       const cloudName = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
       const uploadPreset = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
-      if (!cloudName || !uploadPreset) throw new Error('Missing Cloudinary config (REACT_APP_CLOUDINARY_CLOUD_NAME / UPLOAD_PRESET)');
+      if (!cloudName || !uploadPreset) {
+        throw new Error('Missing Cloudinary config');
+      }
 
       const fd = new FormData();
       fd.append('file', file);
@@ -186,10 +189,7 @@ export default function CustomerDetailsPage() {
         body: fd
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error('Cloudinary upload failed: ' + text);
-      }
+      if (!res.ok) throw new Error('Cloudinary upload failed');
 
       const data = await res.json();
       const doc = {
@@ -199,36 +199,39 @@ export default function CustomerDetailsPage() {
         public_id: data.public_id
       };
 
-      // Append doc to customer documents and persist via backend
       const next = { ...customer, documents: [...(customer.documents || []), doc] };
       const updated = await updateCustomer(id, next);
       setCustomer(updated);
       setForm(updated);
+
+      await createNotification({
+        message: `Document "${file.name}" uploaded to customer ${customer.name}`,
+        read: false
+      }).catch(console.error);
     } catch (err) {
       setError(err.message || String(err));
-    } finally {
-      setUploading(false);
-      e.target.value = null;
+      throw err;
     }
   }
 
-  // helper: download a remote file via blob -> triggers browser download
-  async function downloadFile(url, filename) {
+  async function handleDeleteDocument(docId) {
+    if (!window.confirm('Delete this document?')) return;
+    setError('');
     try {
-      const res = await fetch(url, { mode: 'cors' });
-      if (!res.ok) throw new Error('Failed to fetch file for download');
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename || 'file';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(blobUrl);
+      const doc = (customer.documents || []).find(d => d._id === docId);
+      const updatedDocs = customer.documents.filter(d => d._id !== docId);
+      const next = { ...customer, documents: updatedDocs };
+      
+      const updated = await updateCustomer(id, next);
+      setCustomer(updated);
+      setForm(updated);
+
+      await createNotification({
+        message: `Document "${doc?.fileName}" deleted from customer ${customer.name}`,
+        read: false
+      }).catch(console.error);
     } catch (err) {
-      // fallback: open in new tab if fetch/download fails (CORS or other)
-      window.open(url, '_blank', 'noopener,noreferrer');
+      setError(err.message || String(err));
     }
   }
 
@@ -237,160 +240,41 @@ export default function CustomerDetailsPage() {
 
   return (
     <div style={{ padding: 20, maxWidth: 1000, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>{customer.name}</h2>
-        <div>
-          <button onClick={() => navigate('/customers')} style={{ marginRight: 8 }}>Back</button>
-          <button onClick={() => setEditing(prev => !prev)} style={{ marginRight: 8 }}>{editing ? 'Cancel' : 'Edit'}</button>
-          <button onClick={removeCustomer} style={{ background: '#e53935', color: '#fff' }}>Delete</button>
-        </div>
-      </div>
+      <CustomerHeader
+        customer={customer}
+        isEditing={editing}
+        onEdit={() => setEditing(prev => !prev)}
+        onDelete={removeCustomer}
+      />
 
       {error && <div style={{ color: 'red', marginBottom: 12 }}>{error}</div>}
 
-      {editing ? (
-        <form onSubmit={saveDetails} style={{ display: 'grid', gap: 8, marginBottom: 20 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <input name="name" value={form.name || ''} onChange={onChange} required />
-            <input name="companyName" value={form.companyName || ''} onChange={onChange} />
-            <input name="email" value={form.email || ''} onChange={onChange} />
-            <input name="phone" value={form.phone || ''} onChange={onChange} />
-            <input name="address" value={form.address || ''} onChange={onChange} />
-          </div>
+      <CustomerDetailsForm
+        customer={customer}
+        form={form}
+        editing={editing}
+        onChange={onChange}
+        setField={setField}
+        onSave={saveDetails}
+      />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <input name="contactPerson.name" value={form.contactPerson?.name || ''} onChange={e => setField('contactPerson.name', e.target.value)} />
-            <input name="contactPerson.position" value={form.contactPerson?.position || ''} onChange={e => setField('contactPerson.position', e.target.value)} />
-            <input name="contactPerson.email" value={form.contactPerson?.email || ''} onChange={e => setField('contactPerson.email', e.target.value)} />
-            <input name="contactPerson.phone" value={form.contactPerson?.phone || ''} onChange={e => setField('contactPerson.phone', e.target.value)} />
-          </div>
+      <CommunicationLog
+        logs={customer.communicationLogs}
+        onAdd={handleAddLog}
+        onDelete={handleDeleteLog}
+      />
 
-          <div>
-            <button type="submit">Save</button>
-          </div>
-        </form>
-      ) : (
-        <div style={{ marginBottom: 20 }}>
-          <div><strong>Company:</strong> {customer.companyName || '-'}</div>
-          <div><strong>Email:</strong> {customer.email || '-'}</div>
-          <div><strong>Phone:</strong> {customer.phone || '-'}</div>
-          <div><strong>Address:</strong> {customer.address || '-'}</div>
-          <div><strong>Contact:</strong> {customer.contactPerson?.name || '-'} {customer.contactPerson?.email ? `(${customer.contactPerson.email})` : ''}</div>
-        </div>
-      )}
+      <ProjectHistory
+        projects={customer.projectHistory}
+        onAdd={handleAddProject}
+        onDelete={handleDeleteProject}
+      />
 
-      {/* Communication log */}
-      <section style={{ marginBottom: 20 }}>
-        <h3>Communication Log</h3>
-        <form onSubmit={addLog} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-          <select value={logType} onChange={e => setLogType(e.target.value)} style={{ minWidth: 120 }}>
-            <option value="note">Note</option>
-            <option value="call">Call</option>
-            <option value="email">Email</option>
-            <option value="meeting">Meeting</option>
-          </select>
-          <input placeholder="Log message" value={logMsg} onChange={e => setLogMsg(e.target.value)} style={{ flex: 1 }} />
-          <button type="submit" disabled={addingLog}>{addingLog ? 'Adding...' : 'Add'}</button>
-        </form>
-        <ul>
-          {(customer.communicationLogs || []).slice().reverse().map((l) => (
-            <li key={l._id} style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 13, color: '#666' }}>{new Date(l.timestamp).toLocaleString()} • {l.type}</div>
-                <div>{l.message}</div>
-              </div>
-              <div>
-                <button onClick={() => handleDeleteLog(l._id)} style={{ background: '#e53935', color: '#fff' }}>Delete</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Project history */}
-      <section style={{ marginBottom: 20 }}>
-        <h3>Project History</h3>
-        <form onSubmit={addProject} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-          <input 
-            placeholder="Project Name" 
-            value={project.projectName} 
-            onChange={e => setProject(prev => ({ ...prev, projectName: e.target.value }))} 
-            required 
-          />
-          <input 
-            placeholder="Description" 
-            value={project.description} 
-            onChange={e => setProject(prev => ({ ...prev, description: e.target.value }))} 
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            <input 
-              type="date" 
-              placeholder="Start Date" 
-              value={project.startDate} 
-              onChange={e => setProject(prev => ({ ...prev, startDate: e.target.value }))} 
-            />
-            <input 
-              type="date" 
-              placeholder="End Date" 
-              value={project.endDate} 
-              onChange={e => setProject(prev => ({ ...prev, endDate: e.target.value }))} 
-            />
-            <select 
-              value={project.status} 
-              onChange={e => setProject(prev => ({ ...prev, status: e.target.value }))}
-            >
-              <option value="ongoing">Ongoing</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-          <button type="submit" disabled={addingProject}>{addingProject ? 'Adding...' : 'Add Project'}</button>
-        </form>
-
-        <ul>
-          {(customer.projectHistory || []).map((p) => (
-            <li key={p._id} style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{p.projectName} ({p.status || 'n/a'})</div>
-                <div style={{ fontSize: 13, color: '#666' }}>
-                  {p.startDate ? new Date(p.startDate).toLocaleDateString() : '-'} - {p.endDate ? new Date(p.endDate).toLocaleDateString() : '-'}
-                </div>
-                <div>{p.description}</div>
-              </div>
-              <div>
-                <button onClick={() => handleDeleteProject(p._id)} style={{ background: '#e53935', color: '#fff' }}>Delete</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Documents */}
-      <section>
-        <h3>Documents</h3>
-        <div style={{ marginBottom: 12 }}>
-          <input type="file" onChange={onFileChange} disabled={uploading} />
-          {uploading && <span style={{ marginLeft: 8 }}>Uploading...</span>}
-        </div>
-
-        <ul>
-          {(customer.documents || []).map((d) => (
-            <li key={d._id || d.fileUrl} style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div>
-                <div>
-                  <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>{d.fileName}</a>
-                </div>
-                <div style={{ fontSize: 12, color: '#666' }}>{d.uploadedAt ? new Date(d.uploadedAt).toLocaleString() : ''}</div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => window.open(d.fileUrl, '_blank', 'noopener,noreferrer')} title="View" style={{ padding: '6px 10px' }}>View</button>
-                <button onClick={() => downloadFile(d.fileUrl, d.fileName)} title="Download" style={{ padding: '6px 10px' }}>Download</button>
-                <button onClick={() => handleDeleteDoc(d._id)} style={{ background: '#e53935', color: '#fff', padding: '6px 10px' }}>Delete</button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <DocumentManager
+        documents={customer.documents}
+        onUpload={handleUploadDocument}
+        onDelete={handleDeleteDocument}
+      />
     </div>
   );
 }

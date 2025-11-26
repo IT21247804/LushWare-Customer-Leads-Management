@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import FollowUpWidget from '../components/FollowUpWidget';
-import NotificationWidget from '../components/NotificationWidget';
+import FollowUpWidget from '../components/dashboard/FollowUpWidget';
+import NotificationWidget from '../components/dashboard/NotificationWidget';
 
 export default function Dashboard() {
   const navigate = useNavigate();

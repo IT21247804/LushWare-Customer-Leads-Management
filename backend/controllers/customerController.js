@@ -1,4 +1,5 @@
 const Customer = require('../models/Customer');
+const Lead = require('../models/Lead');
 
 // Get all customers
 async function getAll(req, res) {
@@ -52,6 +53,7 @@ async function update(req, res) {
   }
 }
 
+
 // Delete customer
 async function remove(req, res) {
   try {
@@ -59,6 +61,25 @@ async function remove(req, res) {
 
     if (!customer)
       return res.status(404).json({ error: 'Customer not found' });
+
+    // Find and update related lead if it exists
+    // Match by email, phone, or name to find the corresponding lead
+    if (customer.email || customer.phone) {
+      const query = {
+        status: 'converted',
+        $or: []
+      };
+      
+      if (customer.email) query.$or.push({ email: customer.email });
+      if (customer.phone) query.$or.push({ phone: customer.phone });
+      
+      if (query.$or.length > 0) {
+        await Lead.updateOne(query, { 
+          status: 'lost',
+          convertedAt: null 
+        });
+      }
+    }
 
     res.json({ message: 'Deleted', id: req.params.id });
   } catch (err) {

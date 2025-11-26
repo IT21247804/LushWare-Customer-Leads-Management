@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getFollowUps, updateFollowUp, deleteFollowUp } from '../api/followup';
+import { getFollowUps, updateFollowUp, deleteFollowUp } from '../../api/followup';
 import { Link } from 'react-router-dom';
 
 export default function FollowUpWidget() {

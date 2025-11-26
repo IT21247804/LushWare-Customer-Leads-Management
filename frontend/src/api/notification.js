@@ -22,3 +22,12 @@ export async function deleteNotification(id) {
   const res = await fetch(`${API}/api/notifications/${id}`, { method: 'DELETE' });
   return handleRes(res);
 }
+
+export async function createNotification(payload) {
+  const res = await fetch(`${API}/api/notifications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return handleRes(res);
+}

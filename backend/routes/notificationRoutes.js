@@ -3,6 +3,7 @@ const router = express.Router();
 const controller = require("../controllers/notificationController");
 
 router.get("/", controller.getAll);
+router.post("/", controller.create);
 router.put("/:id/read", controller.markRead);
 router.delete("/:id", controller.remove);
 
