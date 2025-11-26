@@ -1,6 +1,7 @@
 // ...existing code...
 import React, { useEffect, useState } from 'react';
 import { getLeads, deleteLead, updateLead, convertLead } from '../api/lead';
+import { createFollowUp } from '../api/followup';
 import { Link } from 'react-router-dom';
 
 const SOURCE_OPTS = [
@@ -102,7 +103,7 @@ export default function LeadsPage() {
     }
   }
 
-  async function onConvert(id) {
+   async function onConvert(id) {
     if (!window.confirm('Convert this lead to a customer?')) return;
     setError('');
     try {
@@ -110,6 +111,25 @@ export default function LeadsPage() {
       if (result.lead) {
         setLeads(prev => prev.map(l => l._id === result.lead._id ? result.lead : l));
       }
+
+      // Create a follow-up for the newly converted customer
+      if (result.customer && result.customer._id) {
+        const followUpDate = new Date();
+        followUpDate.setMinutes(followUpDate.getMinutes() + 1); // follow up in 1 minute
+
+        try {
+          await createFollowUp({
+            customerId: result.customer._id,
+            title: 'Follow-up on converted customer',
+            notes: `Auto-created follow-up for newly converted customer: ${result.customer.name}`,
+            followUpDate: followUpDate.toISOString(),
+            status: 'scheduled'
+          });
+        } catch (followUpErr) {
+          console.error('Failed to create follow-up:', followUpErr);
+        }
+      }
+
       alert(result.message || 'Converted lead to customer');
     } catch (err) {
       setError(err.message || String(err));

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createLead } from '../api/lead';
+import { createFollowUp } from '../api/followup';
 
 export default function CreateLead() {
   const navigate = useNavigate();
@@ -13,6 +14,11 @@ export default function CreateLead() {
     status: 'new',
     priority: 'warm'
   });
+  const [followUpConfig, setFollowUpConfig] = useState({
+    createFollowUp: true,
+    followUpMinutes: 1, // default: follow up in 1 minute
+    followUpTitle: 'Follow up on new lead'
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -21,12 +27,34 @@ export default function CreateLead() {
     setForm(prev => ({ ...prev, [name]: value }));
   }
 
+  function onFollowUpChange(e) {
+    const { name, value, checked, type } = e.target;
+    setFollowUpConfig(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  }
+
   async function onSubmit(e) {
     e.preventDefault();
     setSaving(true);
     setError('');
     try {
-      await createLead(form);
+      const lead = await createLead(form);
+
+      if (followUpConfig.createFollowUp && lead._id) {
+        const followUpDate = new Date();
+        followUpDate.setMinutes(followUpDate.getMinutes() + Number(followUpConfig.followUpMinutes));
+
+        await createFollowUp({
+          leadId: lead._id,
+          title: followUpConfig.followUpTitle,
+          notes: `Auto-created follow-up for new lead: ${form.name}`,
+          followUpDate: followUpDate.toISOString(),
+          status: 'scheduled'
+        });
+      }
+
       navigate('/leads');
     } catch (err) {
       setError(err.message || String(err));
@@ -76,6 +104,48 @@ export default function CreateLead() {
         </div>
 
         <textarea name="notes" placeholder="Notes" value={form.notes} onChange={onChange} style={{ minHeight: 80 }} />
+
+        {/* Follow-up creation section */}
+        <div style={{ background: '#f0f0f0', padding: 12, borderRadius: 6, marginTop: 12 }}>
+          <h4 style={{ margin: '0 0 8px 0' }}>Auto Follow-up</h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <input
+              type="checkbox"
+              name="createFollowUp"
+              checked={followUpConfig.createFollowUp}
+              onChange={onFollowUpChange}
+              id="createFollowUp"
+            />
+            <label htmlFor="createFollowUp" style={{ margin: 0 }}>Create follow-up for this lead</label>
+          </div>
+
+          {followUpConfig.createFollowUp && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <label style={{ fontSize: 12, color: '#666' }}>Follow-up in (minutes)</label>
+                <input
+                  type="number"
+                  name="followUpMinutes"
+                  value={followUpConfig.followUpMinutes}
+                  onChange={onFollowUpChange}
+                  min="0"
+                  max="10080"
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: '#666' }}>Title</label>
+                <input
+                  type="text"
+                  name="followUpTitle"
+                  value={followUpConfig.followUpTitle}
+                  onChange={onFollowUpChange}
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create'}</button>
